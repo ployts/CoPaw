@@ -7,6 +7,9 @@ import json
 import logging
 import shutil
 from pathlib import Path
+from typing import Optional
+
+from ..config.timezone import detect_system_timezone
 
 from ..config.config import (
     AgentProfileConfig,
@@ -870,3 +873,348 @@ def _do_ensure_qa_agent() -> None:
         "Created builtin QA agent with workspace: %s",
         qa_workspace,
     )
+
+
+def _other_agent_owns_workspace(
+    profiles: dict[str, AgentProfileRef],
+    workspace: Path,
+    builtin_id: str,
+) -> str | None:
+    """If another profile's workspace resolves to ``workspace``, return its id.
+
+    Prevents creating the builtin QA profile on the canonical path
+    ``workspaces/<builtin_id>/`` when a user already assigned that directory
+    to a different agent: ``save_agent_config`` would overwrite their
+    ``agent.json``.
+    """
+    try:
+        target = workspace.resolve()
+    except OSError:
+        target = workspace.expanduser()
+    for aid, ref in profiles.items():
+        if aid == builtin_id:
+            continue
+        other = Path(ref.workspace_dir).expanduser()
+        try:
+            other_res = other.resolve()
+        except OSError:
+            other_res = other
+        if other_res == target:
+            return aid
+    return None
+
+
+def ensure_qa_agent_exists() -> None:
+    """Ensure the builtin QA agent profile and workspace exist.
+
+    On **first creation** only, ``active_skills`` is seeded from
+    ``BUILTIN_QA_AGENT_SKILL_NAMES`` (e.g. ``guidance``,
+    ``copaw_source_index``), and built-in tools are restricted (see
+    ``build_qa_agent_tools_config``).
+    After that, the user may change skills and tools freely; we do not
+    overwrite their choices on later startups.
+
+    If the canonical QA workspace path is already used by another agent id,
+    builtin creation is **skipped** (with a warning) so that workspace's
+    ``agent.json`` is not overwritten.
+    """
+    from .routers.agents import _initialize_agent_workspace
+
+    config = load_config()
+    qa_id = BUILTIN_QA_AGENT_ID
+
+    if qa_id in config.agents.profiles:
+        agent_ref = config.agents.profiles[qa_id]
+        qa_workspace = Path(agent_ref.workspace_dir).expanduser()
+        agent_existed = True
+    else:
+        qa_workspace = Path(
+            f"{WORKING_DIR}/workspaces/{qa_id}",
+        ).expanduser()
+        agent_existed = False
+
+    qa_workspace.mkdir(parents=True, exist_ok=True)
+
+    _ensure_workspace_json_files(qa_workspace, "QA agent")
+
+    if agent_existed:
+        return
+
+    other_id = _other_agent_owns_workspace(
+        config.agents.profiles,
+        qa_workspace,
+        qa_id,
+    )
+    if other_id is not None:
+        logger.warning(
+            "Skipping builtin QA profile %r: workspace %s is already used by "
+            "agent %r. Point that agent to another directory or remove it "
+            "from config before the builtin QA slot can be created.",
+            qa_id,
+            qa_workspace,
+            other_id,
+        )
+        return
+
+    logger.info("Creating builtin QA agent...")
+    qa_skill_list = list(BUILTIN_QA_AGENT_SKILL_NAMES)
+
+    language = config.agents.language or "zh"
+    agent_config = AgentProfileConfig(
+        id=qa_id,
+        name=BUILTIN_QA_AGENT_NAME,
+        description=(
+            "Builtin Q&A helper for CoPaw setup, local config under "
+            "COPAW_WORKING_DIR, and documentation. Prefer reading files "
+            "before answering; use absolute paths for code outside this "
+            "workspace."
+        ),
+        workspace_dir=str(qa_workspace),
+        language=language,
+        channels=ChannelConfig(),
+        mcp=MCPConfig(),
+        heartbeat=HeartbeatConfig(),
+        tools=build_qa_agent_tools_config(),
+    )
+
+    _initialize_agent_workspace(
+        qa_workspace,
+        agent_config,
+        skill_names=qa_skill_list,
+        builtin_qa_md_seed=True,
+    )
+
+    config.agents.profiles[qa_id] = AgentProfileRef(
+        id=qa_id,
+        workspace_dir=str(qa_workspace),
+    )
+    save_config(config)
+    save_agent_config(qa_id, agent_config)
+    logger.info(
+        "Created builtin QA agent with workspace: %s",
+        qa_workspace,
+    )
+
+
+def _other_agent_owns_workspace(
+    profiles: dict[str, AgentProfileRef],
+    workspace: Path,
+    builtin_id: str,
+) -> str | None:
+    """If another profile's workspace resolves to ``workspace``, return its id.
+
+    Prevents creating the builtin QA profile on the canonical path
+    ``workspaces/<builtin_id>/`` when a user already assigned that directory
+    to a different agent: ``save_agent_config`` would overwrite their
+    ``agent.json``.
+    """
+    try:
+        target = workspace.resolve()
+    except OSError:
+        target = workspace.expanduser()
+    for aid, ref in profiles.items():
+        if aid == builtin_id:
+            continue
+        other = Path(ref.workspace_dir).expanduser()
+        try:
+            other_res = other.resolve()
+        except OSError:
+            other_res = other
+        if other_res == target:
+            return aid
+    return None
+
+
+def ensure_qa_agent_exists() -> None:
+    """Ensure the builtin QA agent profile and workspace exist.
+
+    On **first creation** only, ``active_skills`` is seeded from
+    ``BUILTIN_QA_AGENT_SKILL_NAMES`` (e.g. ``guidance``,
+    ``copaw_source_index``), and built-in tools are restricted (see
+    ``build_qa_agent_tools_config``).
+    After that, the user may change skills and tools freely; we do not
+    overwrite their choices on later startups.
+
+    If the canonical QA workspace path is already used by another agent id,
+    builtin creation is **skipped** (with a warning) so that workspace's
+    ``agent.json`` is not overwritten.
+    """
+    from .routers.agents import _initialize_agent_workspace
+
+    config = load_config()
+    qa_id = BUILTIN_QA_AGENT_ID
+
+    if qa_id in config.agents.profiles:
+        agent_ref = config.agents.profiles[qa_id]
+        qa_workspace = Path(agent_ref.workspace_dir).expanduser()
+        agent_existed = True
+    else:
+        qa_workspace = Path(
+            f"{WORKING_DIR}/workspaces/{qa_id}",
+        ).expanduser()
+        agent_existed = False
+
+    qa_workspace.mkdir(parents=True, exist_ok=True)
+
+    _ensure_workspace_json_files(qa_workspace, "QA agent")
+
+    if agent_existed:
+        return
+
+    other_id = _other_agent_owns_workspace(
+        config.agents.profiles,
+        qa_workspace,
+        qa_id,
+    )
+    if other_id is not None:
+        logger.warning(
+            "Skipping builtin QA profile %r: workspace %s is already used by "
+            "agent %r. Point that agent to another directory or remove it "
+            "from config before the builtin QA slot can be created.",
+            qa_id,
+            qa_workspace,
+            other_id,
+        )
+        return
+
+    logger.info("Creating builtin QA agent...")
+    qa_skill_list = list(BUILTIN_QA_AGENT_SKILL_NAMES)
+
+    language = config.agents.language or "zh"
+    agent_config = AgentProfileConfig(
+        id=qa_id,
+        name=BUILTIN_QA_AGENT_NAME,
+        description=(
+            "Builtin Q&A helper for CoPaw setup, local config under "
+            "COPAW_WORKING_DIR, and documentation. Prefer reading files "
+            "before answering; use absolute paths for code outside this "
+            "workspace."
+        ),
+        workspace_dir=str(qa_workspace),
+        language=language,
+        channels=ChannelConfig(),
+        mcp=MCPConfig(),
+        heartbeat=HeartbeatConfig(),
+        tools=build_qa_agent_tools_config(),
+    )
+
+    _initialize_agent_workspace(
+        qa_workspace,
+        agent_config,
+        skill_names=qa_skill_list,
+        builtin_qa_md_seed=True,
+    )
+
+    config.agents.profiles[qa_id] = AgentProfileRef(
+        id=qa_id,
+        workspace_dir=str(qa_workspace),
+    )
+    save_config(config)
+    save_agent_config(qa_id, agent_config)
+    logger.info(
+        "Created builtin QA agent with workspace: %s",
+        qa_workspace,
+    )
+
+def _create_default_job(language: str = "zh") -> dict:
+    """Create default memory cleanup cron job.
+    
+    Args:
+        language: Language code (zh, en, ru)
+    """
+    # Default job definitions by language
+    DEFAULT_JOBS = {
+        "zh": {
+            "name": "每日记忆提纯与去冗余",
+            "cron": "0 23 * * *",
+            "text": (
+                "现在执行每日记忆沉淀，请读取今日日志与现有长期记忆，"
+                "提取高价值增量信息并去重合并，最终覆写至 `MEMORY.md`，"
+                "确保长期记忆文件保持最新、精简、无冗余。\n\n【执行原则】\n"
+                "1. 极简去冗：严禁记录流水账、Bug修复细节或单次任务。"
+                "仅保留“核心业务决策”、“确认的用户偏好”与“高价值可复用经验”。\n"
+                "2. 状态覆写：若发现状态变更（如技术栈更改、配置更新），"
+                "必须用新状态替换旧状态，严禁新旧矛盾信息并存。\n"
+                "3. 归纳整合：主动将零碎的相似规则提炼、合并为通用性强的独立条目。"
+                "\n4. 废弃剔除：主动删除已被证伪的假设或不再适用的陈旧条目。\n\n"
+                "【执行步骤】\n步骤 1 [加载]：调用 `read` 工具，"
+                "读取根目录下的 `MEMORY.md` 以及当天的日志文件 `memory/YYYY-MM-DD.md`。\n"
+                "步骤 2 [提纯]：在后台对比新旧内容，严格按照【执行原则】进行去重、替换、剔除和合并，"
+                "生成一份全新的记忆内容。\n步骤 3 [落盘]：调用 `write` 或 `edit` 工具，"
+                "将整理后全新的 Markdown 内容覆盖写入到 `MEMORY.md` 中（请保持清晰的层级与列表结构）。\n"
+                "步骤 4 [汇报]：在对话中向我简短汇报：1) 新增/沉淀了哪些核心记忆；2) 修正/删除了哪些过期内容。"
+            ),
+        },
+        "en": {
+            "name": "Daily Memory Purification and De-redundancy",
+            "cron": "0 23 * * *",
+            "text": (
+                "Execute daily memory consolidation. Please act as a 'Memory "
+                "Organizer', read today's logs and existing long-term memory, "
+                "extract high-value incremental information, deduplicate and "
+                "merge, and ultimately overwrite `MEMORY.md`. Ensure the "
+                "long-term memory file remains up-to-date, concise, and "
+                "non-redundant.\n\n[Execution Principles]\n1. Extreme "
+                "Minimalism: Strictly forbid recording daily routines, "
+                "specific bug-fix details, or one-off tasks. Retain ONLY 'core"
+                " business decisions', 'confirmed user preferences', and "
+                "'high-value reusable experiences'.\n2. State Overwrite: If a"
+                " state change is detected (e.g., tech stack changes, config "
+                "updates), you MUST replace the old state with the new one. "
+                "Contradictory old and new information must not coexist.\n3. "
+                "Inductive Consolidation: Proactively distill and merge "
+                "fragmented, similar rules into highly universal, independent"
+                " entries.\n4. Deprecation: Proactively delete hypotheses "
+                "that have been proven false or outdated entries that no "
+                "longer apply.\n\n[Execution Steps]\nStep 1 [Load]: Invoke "
+                "the `read` tool to read `MEMORY.md` in the root directory "
+                "and today's log file `memory/YYYY-MM-DD.md`.\nStep 2 "
+                "[Purify]: Compare the old and new content in the "
+                "background. Strictly follow the [Execution Principles] "
+                "to deduplicate, replace, remove, and merge, generating "
+                "entirely new memory content.\nStep 3 [Save]: Invoke the "
+                "`write` or `edit` tool to overwrite the newly organized "
+                "Markdown content into `MEMORY.md` (maintain clear "
+                "hierarchy and list structures).\nStep 4 [Report]: Briefly"
+                " report to me in the chat: 1) What core memories were newly"
+                " added/consolidated; 2) What outdated content was corrected"
+                "/deleted."
+            ),
+        }
+    }
+    # Build cron job spec 
+    job_config = DEFAULT_JOBS.get(language, DEFAULT_JOBS["en"])
+    schedule = {"type": "cron", "cron": job_config["cron"], "timezone": detect_system_timezone()}
+    dispatch = {
+        "type": "channel",
+        "channel": "console",
+        "target": {"user_id": "admin", "session_id": "default"},
+        "mode": "final",
+        "meta": {},
+    }
+    runtime = {
+        "max_concurrency": 1,
+        "timeout_seconds": 120,
+        "misfire_grace_seconds": 60,
+    }
+    return {
+        "id": "c947646b-5b99-4149-b694-8f2b385a0d18",
+        "name": job_config["name"],
+        "enabled": True,
+        "schedule": schedule,
+        "task_type": "agent",
+        "request": {
+            "input": [
+                {
+                    "role": "user",
+                    "type": "message",
+                    "content": [{"type": "text", "text": job_config["text"]}],
+                },
+            ],
+            "session_id": "default",
+            "user_id": "admin",
+        },
+        "dispatch": dispatch,
+        "runtime": runtime,
+        "meta": {},
+    }
