@@ -78,10 +78,13 @@ One page per day, appended with the day's work and interactions.
 ## Memory Configuration
 
 ### Long-Term Memory Configuration via Cron
+
 In daily interactions, most information is accumulated as a "running log" in memory/YYYY-MM-DD.md (Daily Log). As conversations grow, these logs become fragmented and redundant.
 
 #### Create the Task Configuration File
+
 Create a file named memory_cron.json anywhere and fill it with the following configuration (replace channel, target_user, and target_session with your actual values):
+
 ```json
 {
   "type": "agent",
@@ -95,12 +98,14 @@ Create a file named memory_cron.json anywhere and fill it with the following con
 ```
 
 #### Start the Cron Job
+
 Ensure the copaw app service is running, then execute the following command in the terminal to load the task:
+
 ```bash
 copaw cron create -f memory_cron.json
 ```
-With this configuration, the Agent will automatically review the day's running logs at the specified time (e.g., 23:00 daily), strictly follow the instructions to purify high-value information, and update it in MEMORY.md, achieving self-purification and iteration of long-term memory.
 
+With this configuration, the Agent will automatically review the day's running logs at the specified time (e.g., 23:00 daily), strictly follow the instructions to purify high-value information, and update it in MEMORY.md, achieving self-purification and iteration of long-term memory.
 
 **Starting from the latest version, CoPaw automatically creates a default memory cleanup cron job during initialization**, eliminating the need for manual setup. This ensures your long-term memory stays organized without additional configuration.
 
