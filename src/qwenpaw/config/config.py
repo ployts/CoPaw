@@ -408,7 +408,7 @@ class MemorySummaryConfig(BaseModel):
     )
 
     dream_cron: str = Field(
-        default="",
+        default="0 23 * * *",
         description="Cron expression for dream-based memory optimization job "
         "(empty to disable)",
     )
