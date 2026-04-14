@@ -2,12 +2,12 @@
 # pylint: disable=too-many-branches
 # mypy: ignore-errors
 """ReMeLight-backed memory manager for agents."""
-import asyncio
 import importlib.metadata
 import json
 import logging
 import os
 import platform
+import shutil
 import uuid
 from datetime import datetime
 from pathlib import Path
@@ -450,10 +450,6 @@ See: https://docs.trychroma.com/docs/overview/troubleshooting#sqlite
         """
         logger.info("running dream-based memory optimization")
 
-        # Create backup directory to store backup files
-        self.backup_path = Path(self.working_dir).absolute() / "backup"
-        self.backup_path.mkdir(parents=True, exist_ok=True)
-
         self._prepare_model_formatter()
 
         # Load agent config to get model configuration
@@ -471,7 +467,7 @@ See: https://docs.trychroma.com/docs/overview/troubleshooting#sqlite
         # Get current date in YYYY-MM-DD format
         current_date = datetime.now().strftime("%Y-%m-%d")
 
-        # Build the dream prompt with working directory and current date
+        # Build the dream prompt with working directory and current date=
         query_text = self._get_dream_prompt(
             language,
             current_date,
@@ -483,6 +479,28 @@ See: https://docs.trychroma.com/docs/overview/troubleshooting#sqlite
 
         # Ensure model and formatter are prepared
         self._prepare_model_formatter()
+
+        # Create backup directory to store backup files
+        self.backup_path = Path(self.working_dir).absolute() / "backup"
+        self.backup_path.mkdir(parents=True, exist_ok=True)
+
+        # Handle MEMORY.md backup directly in code before agent processing
+        memory_file = Path(self.working_dir) / "MEMORY.md"
+        if memory_file.exists():
+            # Create timestamp for backup filename
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            backup_filename = f"memory_backup_{timestamp}.md"
+            backup_file = self.backup_path / backup_filename
+
+            # Read current MEMORY.md content and write to backup
+            try:
+                shutil.copyfile(memory_file, backup_file)
+                logger.info(f"Created MEMORY.md backup: {backup_file}")
+            except Exception as e:
+                logger.error(f"Failed to create MEMORY.md backup: {e}")
+                # Continue anyway, but log the error
+        else:
+            logger.debug("No existing MEMORY.md file to backup")
 
         # Create a minimal ReActAgent for dream functionality
         dream_agent = ReActAgent(
@@ -501,27 +519,11 @@ See: https://docs.trychroma.com/docs/overview/troubleshooting#sqlite
             content=[TextBlock(type="text", text=query_text)],
         )
 
-        # Run the dream agent with the query
-        async def _run_dream_agent() -> None:
-            try:
-                response = await dream_agent.reply(user_msg)
-                logger.debug(
-                    f"Dream agent response: {response.get_text_content()}",
-                )
-            except Exception as e:
-                logger.error(f"Dream agent failed: {e}")
-                raise
-
         try:
-            await asyncio.wait_for(
-                _run_dream_agent(),
-                timeout=300,
-            )  # 5 minutes timeout
-            logger.info(
-                "dream-based memory optimization completed successfully",
+            response = await dream_agent.reply(user_msg)
+            logger.debug(
+                f"Dream agent response: {response.get_text_content()}",
             )
-        except asyncio.TimeoutError:
-            logger.warning("dream-based memory optimization timed out")
         except Exception as e:
             logger.error("dream-based memory optimization failed: %s", repr(e))
             raise
@@ -534,10 +536,10 @@ See: https://docs.trychroma.com/docs/overview/troubleshooting#sqlite
         """Get the dream prompt based on language."""
         prompts = {
             "zh": (
-                "现在进入梦境状态，对长期记忆进行安全优化整理。请严格按照以下步骤操作，"
-                "确保所有变更都有备份且可回滚。\n\n【核心概念】\n"
-                "- MEMORY.md：这是你的长期记忆文件，包含经过提炼的核心业务决策、用户偏好和高价值经验\n"
-                "- 你的任务是直接维护和优化 MEMORY.md\n\n"
+                "现在进入梦境状态，对长期记忆进行优化整理。请读取今日日志与现有长期记忆，"
+                "在梦境中提炼高价值增量信息并去重合并，最终覆写至 `MEMORY.md`，"
+                "确保长期记忆文件保持最新、精简、无冗余。\n\n"
+                f"当前日期: {current_date}\n\n"
                 "【梦境优化原则】\n"
                 "1. 极简去冗：严禁记录流水账、Bug修复细节或单次任务。"
                 "仅保留“核心业务决策”、“确认的用户偏好”与“高价值可复用经验”。\n"
@@ -545,84 +547,47 @@ See: https://docs.trychroma.com/docs/overview/troubleshooting#sqlite
                 "必须用新状态替换旧状态，严禁新旧矛盾信息并存。\n"
                 "3. 归纳整合：主动将零碎的相似规则提炼、合并为通用性强的独立条目。"
                 "\n4. 废弃剔除：主动删除已被证伪的假设或不再适用的陈旧条目。\n\n"
-                "【安全操作流程】\n"
-                "⚠️ 重要：在修改 MEMORY.md 之前必须先创建备份！\n\n"
-                f"当前日期: {current_date}\n\n"
-                "步骤 1 [环境准备]：\n"
-                "- 读取现有的 MEMORY.md 文件作为当前记忆基准（如果不存在则从模板创建）\n"
-                "- 读取当天的日志文件 `memory/YYYY-MM-DD.md`\n\n"
-                "步骤 2 [备份创建]：\n"
-                "- 将当前 MEMORY.md 的内容备份到 "
-                "`backup/memory_backup_YYYYMMDD_HHMMSS.md`\n\n"
-                "步骤 3 [梦境提纯]：\n"
-                "- 在梦境中对比新旧内容，严格按照【梦境优化原则】进行去重、替换、剔除和合并\n"
-                "- 生成一份全新的记忆内容，并保存到 `MEMORY_new.md`\n\n"
-                "步骤 4 [验证与提交]：\n"
-                "- 仔细检查 `MEMORY_new.md` 的内容是否符合优化原则\n"
-                "- 确认无误后，将 `MEMORY_new.md` 重命名为 `MEMORY.md`\n"
-                "- 记录操作日志到 `backup/memory_log_YYYYMMDD_HHMMSS.md`\n\n"
-                "步骤 5 [苏醒汇报]：\n"
-                "从梦境中苏醒后，在对话中向我简短汇报：\n"
-                "1) 新增/沉淀了哪些核心记忆\n"
-                "2) 修正/删除了哪些过期内容\n"
-                "3) 备份文件的位置和名称\n"
-                "4) 最终的 MEMORY.md 是否成功更新"
+                "【梦境执行步骤】\n步骤 1 [加载]：调用 `read` 工具，"
+                "读取根目录下的 `MEMORY.md` 以及当天的日志文件 `memory/YYYY-MM-DD.md`。\n"
+                "步骤 2 [梦境提纯]：在梦境中对比新旧内容，严格按照【梦境优化原则】进行去重、替换、剔除和合并，"
+                "生成一份全新的记忆内容。\n步骤 3 [落盘]：调用 `write` 或 `edit` 工具，"
+                "将整理后全新的 Markdown 内容覆盖写入到 `MEMORY.md` 中（请保持清晰的层级与列表结构）。\n"
+                "步骤 4 [苏醒汇报]：从梦境中苏醒后，在对话中向我简短汇报：1) 新增/沉淀了哪些核心记忆；"
+                "2) 修正/删除了哪些过期内容。"
             ),
             "en": (
-                "Enter dream state for safe memory optimization. Please "
-                "strictly follow the steps below to ensure all changes are "
-                "backed up and can be rolled back.\n\n"
-                "[Core Concepts]\n"
-                "- MEMORY.md: This is your long-term memory file, containing "
-                "distilled core business decisions, user preferences, and "
-                "high-value experiences\n"
-                "- Your task is to directly maintain and optimize "
-                "MEMORY.md\n\n"
-                "[Dream Optimization Principles]\n"
-                "1. Extreme Minimalism: Strictly forbid recording daily "
-                "routines, specific bug-fix details, or one-off tasks. "
-                "Retain ONLY 'core business decisions', 'confirmed user"
-                " preferences', and 'high-value reusable experiences'.\n"
-                "2. State Overwrite: If a state change is detected (e.g., "
-                "tech stack changes, config updates), you MUST replace the "
-                "old state with the new one. Contradictory old and new "
-                "information must not coexist.\n"
-                "3. Inductive Consolidation: Proactively distill and merge "
-                "fragmented, similar rules into highly universal, independent "
-                "entries.\n"
-                "4. Deprecation: Proactively delete hypotheses that have been "
-                "proven false or outdated entries that no longer apply.\n\n"
-                "[Safe Operation Procedure]\n"
-                "⚠️ Important: You MUST create a backup before modifying "
-                "MEMORY.md!\n\n"
+                "Enter dream state for memory optimization. Please act as a "
+                "'Dream Memory Organizer', read today's logs and existing "
+                "long-term memory, extract high-value incremental information "
+                "in your dream state, deduplicate and merge, and ultimately "
+                "overwrite `MEMORY.md`. Ensure the long-term memory file "
+                "remains up-to-date, concise, and non-redundant.\n\n"
                 f"Current date: {current_date}\n\n"
-                "Step 1 [Environment Setup]:\n"
-                "- Read existing MEMORY.md file as current memory baseline "
-                "(create from template if it doesn't exist)\n"
-                "- Read today's log file `memory/YYYY-MM-DD.md`\n\n"
-                "Step 2 [Backup Creation]:\n"
-                "- Backup current MEMORY.md content to "
-                "`backup/memory_backup_YYYYMMDD_HHMMSS.md`\n\n"
-                "Step 3 [Dream Purification]:\n"
-                "- Compare old and new content in your dream state, strictly "
-                "following [Dream Optimization Principles] to deduplicate, "
-                "replace, remove, and merge\n"
-                "- Generate entirely new memory content and save it to "
-                "`MEMORY_new.md`\n\n"
-                "Step 4 [Validation and Commit]:\n"
-                "- Carefully review `MEMORY_new.md` content for compliance "
-                "with principles\n"
-                "- If confirmed correct, rename `MEMORY_new.md` to "
-                "`MEMORY.md`\n"
-                "- Record operation log to "
-                "`backup/memory_log_YYYYMMDD_HHMMSS.md`\n\n"
-                "Step 5 [Awake Report]:\n"
+                "[Dream Optimization Principles]\n1. Extreme "
+                "Minimalism: Strictly forbid recording daily routines, "
+                "specific bug-fix details, or one-off tasks. Retain ONLY 'core"
+                " business decisions', 'confirmed user preferences', and "
+                "'high-value reusable experiences'.\n2. State Overwrite: If a"
+                " state change is detected (e.g., tech stack changes, config "
+                "updates), you MUST replace the old state with the new one. "
+                "Contradictory old and new information must not coexist.\n3. "
+                "Inductive Consolidation: Proactively distill and merge "
+                "fragmented, similar rules into highly universal, independent"
+                " entries.\n4. Deprecation: Proactively delete hypotheses "
+                "that have been proven false or outdated entries that no "
+                "longer apply.\n\n[Dream Execution Steps]\nStep 1 [Load]: "
+                "Invoke the `read` tool to read `MEMORY.md` in the root "
+                "directory and today's log file `memory/YYYY-MM-DD.md`.\n"
+                "Step 2 [Dream Purification]: Compare the old and new content "
+                "in your dream state. Strictly follow the [Dream Optimization "
+                "Principles] to deduplicate, replace, remove, and merge, "
+                "generating entirely new memory content.\nStep 3 [Save]: "
+                "Invoke the `write` or `edit` tool to overwrite the newly "
+                "organized Markdown content into `MEMORY.md` (maintain clear "
+                "hierarchy and list structures).\nStep 4 [Awake Report]: "
                 "After waking from your dream, briefly report to me in the "
-                "chat:\n"
-                "1) What core memories were newly added/consolidated\n"
-                "2) What outdated content was corrected/deleted\n"
-                "3) Backup file locations and names\n"
-                "4) Whether the final MEMORY.md was successfully updated"
+                "chat: 1) What core memories were newly added/consolidated; "
+                "2) What outdated content was corrected/deleted."
             ),
         }
         return prompts.get(language, prompts["en"])
