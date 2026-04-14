@@ -35,7 +35,7 @@ graph TB
 
 ## 记忆文件结构
 
-记忆采用纯 Markdown 文件存储，Agent 通过文件工具直接操作。默认工作空间使用三层结构：
+记忆采用纯 Markdown 文件存储，Agent 通过文件工具直接操作。默认工作空间使用两层结构：
 
 ```mermaid
 graph LR

@@ -37,7 +37,7 @@ Long-term memory management includes the following capabilities:
 ## Memory File Structure
 
 Memories are stored as plain Markdown files, operated directly by the Agent via file tools. The default workspace uses a
-three-level structure:
+two-level structure:
 
 ```mermaid
 graph LR
