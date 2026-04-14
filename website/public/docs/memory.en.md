@@ -18,7 +18,6 @@ graph TB
     MemoryMgmt --> SearchLayer[Hybrid Memory Search]
     FileTools --> LTM[MEMORY.md]
     FileTools --> DailyLog[memory/YYYY-MM-DD.md]
-    FileTools --> Dream[DREAM.md]
     Watcher --> Index[Async DB Update]
     SearchLayer --> VectorSearch[Vector Semantic Search]
     SearchLayer --> BM25[BM25 Full-text Search]
@@ -44,11 +43,9 @@ three-level structure:
 graph LR
     Workspace[Workspace working_dir] --> MEMORY[MEMORY.md Long-term Memory]
     Workspace --> MemDir[memory/*]
-    Workspace --> DreamDir[dream/*]
     MemDir --> Day1[2025-02-12.md]
     MemDir --> Day2[2025-02-13.md]
     MemDir --> DayN[...]
-    DreamDir --> DREAM[DREAM.md Dream Memory]
 ```
 
 ### MEMORY.md (Long-term Memory, Optional)
@@ -68,22 +65,13 @@ One page per day, appended with the day's work and interactions.
 - **Updates**: Appended by the Agent via `write` / `edit` file tools; automatically triggered when conversations become
   too long and need summarization
 
-### DREAM.md (Dream Memory, Auto-managed)
-
-Stores core long-term memories after dream-based consolidation, automatically maintained and optimized by the Agent.
-
-- **Location**: `{working_dir}/dream/DREAM.md`
-- **Purpose**: Stores high-value core memories after automatic consolidation, deduplication, and summarization
-- **Updates**: Updated only automatically by the dream functionality; users should not modify directly
-
 ### When to Write Memory?
 
-| Information Type                         | Write Target              | Method                       | Example                                                |
-| ---------------------------------------- | ------------------------- | ---------------------------- | ------------------------------------------------------ |
-| Decisions, preferences, persistent facts | `MEMORY.md`               | `write` / `edit` tools       | "Project uses Python 3.12", "Prefers pytest framework" |
-| Daily notes, runtime context             | `memory/YYYY-MM-DD.md`    | `write` / `edit` tools       | "Fixed login bug today", "Deployed v2.1"               |
-| User says "remember this"                | Write to file immediately | `write` tool                 | Do not only save in memory!                            |
-| **High-value core memories**             | **`dream/DREAM.md`**      | **Dream auto-consolidation** | **Consolidated core business rules**                   |
+| Information Type                         | Write Target              | Method                 | Example                                                |
+| ---------------------------------------- | ------------------------- | ---------------------- | ------------------------------------------------------ |
+| Decisions, preferences, persistent facts | `MEMORY.md`               | `write` / `edit` tools | "Project uses Python 3.12", "Prefers pytest framework" |
+| Daily notes, runtime context             | `memory/YYYY-MM-DD.md`    | `write` / `edit` tools | "Fixed login bug today", "Deployed v2.1"               |
+| User says "remember this"                | Write to file immediately | `write` tool           | Do not only save in memory!                            |
 
 ---
 

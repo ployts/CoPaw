@@ -429,11 +429,14 @@ class CronManager:
     async def _dream_callback(self) -> None:
         """Run one dream-based memory optimization task."""
         try:
-            # Add dream task as background async task, similar to summary tasks
-            self._runner.memory_manager.add_async_dream_task()
-            logger.debug("Dream task added to background queue successfully")
+            # Run dream task
+            await self._runner.memory_manager.dream_memory()
+            logger.debug("Dream task executed successfully")
+        except asyncio.CancelledError:
+            logger.info("Dream task was cancelled")
+            raise
         except Exception as e:  # pylint: disable=broad-except
-            logger.error(f"Failed to schedule dream task: {e}", exc_info=True)
+            logger.error(f"Failed to execute dream task: {e}", exc_info=True)
 
     async def _execute_once(self, job: CronJobSpec) -> None:
         rt = self._rt.get(job.id)

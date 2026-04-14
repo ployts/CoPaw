@@ -17,7 +17,6 @@ graph TB
     MemoryMgmt --> SearchLayer[记忆混合检索]
     FileTools --> LTM[MEMORY.md]
     FileTools --> DailyLog[memory/YYYY-MM-DD.md]
-    FileTools --> Dream[DREAM.md]
     Watcher --> Index[异步更新数据库]
     SearchLayer --> VectorSearch[向量语义搜索]
     SearchLayer --> BM25[BM25 全文检索]
@@ -42,11 +41,9 @@ graph TB
 graph LR
     Workspace[工作空间 working_dir] --> MEMORY[MEMORY.md 长期记忆]
     Workspace --> MemDir[memory/*]
-    Workspace --> DreamDir[dream/*]
     MemDir --> Day1[2025-02-12.md]
     MemDir --> Day2[2025-02-13.md]
     MemDir --> DayN[...]
-    DreamDir --> DREAM[DREAM.md 梦境记忆]
 ```
 
 ### MEMORY.md（长期记忆，可选）
@@ -65,14 +62,6 @@ graph LR
 - **用途**：记录日常笔记和运行上下文
 - **更新**：Agent 通过 `write` / `edit` 文件工具追加写入，对话过长需要进行总结时自动触发
 
-### DREAM.md（梦境记忆，自动管理）
-
-存放经过梦境整理后的核心长期记忆，由 Agent 自动维护和优化。
-
-- **位置**：`{working_dir}/dream/DREAM.md`
-- **用途**：存储经过自动整理、去重、归纳后的高价值核心记忆
-- **更新**：仅由梦境功能自动更新，用户不应直接修改
-
 ### 何时写入记忆？
 
 | 信息类型             | 写入目标               | 操作方式              | 示例                                       |
@@ -80,7 +69,6 @@ graph LR
 | 决策、偏好、持久事实 | `MEMORY.md`            | `write` / `edit` 工具 | "项目使用 Python 3.12"、"偏好 pytest 框架" |
 | 日常笔记、运行上下文 | `memory/YYYY-MM-DD.md` | `write` / `edit` 工具 | "今天修复了登录 Bug"、"部署了 v2.1"        |
 | 用户说"记住这个"     | 立即写入文件           | `write` 工具          | 不要仅保存在内存中！                       |
-| **高价值核心记忆**   | **`dream/DREAM.md`**   | **梦境功能自动整理**  | **经过归纳整合的核心业务规则**             |
 
 ---
 
